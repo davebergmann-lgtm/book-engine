@@ -1,6 +1,11 @@
 'use server'
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
+
+const redis = new Redis({
+  url: process.env.redis_REST_API_URL,
+  token: process.env.redis_REST_API_TOKEN,
+})
 import Papa from "papaparse";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -20,7 +25,7 @@ export async function parseQuery(input) {
 
 // 2. The Recommendation Engine
 export async function getBooks(query, filters, userId = "user_1") {
-  const userHistory = await kv.smembers(`history:${userId}`) || [];
+  const userHistory = await redis.smembers(`history:${userId}`) || [];
   
   // Fetch from Google Books API for raw candidates
   const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=subject:${filters.genre || 'fiction'}&maxResults=15`);
@@ -51,6 +56,6 @@ export async function importHistory(csvText, userId = "user_1") {
   const parsed = Papa.parse(csvText, { header: true });
   const titleKey = Object.keys(parsed.data[0]).find(k => /title/i.test(k));
   const titles = parsed.data.map(r => r[titleKey]).filter(Boolean);
-  await kv.sadd(`history:${userId}`, ...titles);
+  await redis.sadd(`history:${userId}`, ...titles);
   return titles.length;
 }
